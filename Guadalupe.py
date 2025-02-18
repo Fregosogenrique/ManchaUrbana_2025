@@ -6,14 +6,15 @@ import matplotlib.pyplot as plt
 import rasterio
 import numpy as np
 
-# Inicializar Earth Engine
 try:
-    ee.Initialize(project='proyectocuvallesmanchau25')
-    print("Earth Engine inicializado correctamente")
-except Exception as e:
-    ee.Authenticate()
-    ee.Initialize(project='proyectocuvallesmanchau25')
-    print("Nueva autenticación realizada")
+    # Inicializar Earth Engine
+    try:
+        ee.Initialize(project='proyectocuvallesmanchau25')
+        print("Earth Engine inicializado correctamente")
+    except Exception as e:
+        ee.Authenticate()
+        ee.Initialize(project='proyectocuvallesmanchau25')
+        print("Nueva autenticación realizada")
 
 
     # Cargar el shapefile
