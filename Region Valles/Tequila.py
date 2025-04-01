@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Comprehensive 20-Year Analysis of Urban Growth in Vetagrande, Zacatecas, Mexico (2004-2024)
+Comprehensive 20-Year Analysis of Urban Growth in Tequila, Jalisco, Mexico (2004-2024)
 ==========================================================================
 
-This script creates a comprehensive visualization of urban growth in Vetagrande over a
+This script creates a comprehensive visualization of urban growth in Tequila over a
 20-year period in a 2x3 grid layout. The top row displays Landsat images for 2004,
 2014, and 2024, while the bottom row shows urban change analysis for 2004-2014,
 2014-2024, and the full 20-year period (2004-2024). The script produces a visual
@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO,
 import matplotlib.patches as mpatches
 
 # Set up output directory
-output_dir = 'vetagrande_comparison'
+output_dir = 'tequila_comparison'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
@@ -219,9 +219,9 @@ def create_comparison_plot():
     - Top row: Landsat images for 2004, 2014, and 2024
     - Bottom row: Urban change between 2004-2014, 2014-2024, and full 20-year change (2004-2024)
     """
-    # Get the Region of Interest (ROI) for Vetagrande, Zacatecas
-    vetagrande_point = ee.Geometry.Point([-102.647, 22.834])
-    roi = vetagrande_point.buffer(7000)  # 7km buffer around center
+    # Get the Region of Interest (ROI) - Tequila, Jalisco coordinates
+    tequila_point = ee.Geometry.Point([-103.84, 20.88])  # Coordinates for Tequila, Jalisco
+    roi = tequila_point.buffer(10000)  # 10km buffer around center
 
     # Get Landsat composites for all three time periods
     print("Fetching Landsat images for 2004, 2014, and 2024...")
@@ -454,9 +454,9 @@ def create_comparison_plot():
             return img
 
     # Top row: Display satellite images for all three time periods
-    img_2004 = display_ee_image(rgb_2004_url, axes[0, 0], 'Vetagrande 2004')
-    img_2014 = display_ee_image(rgb_2014_url, axes[0, 1], 'Vetagrande 2014')
-    img_2024 = display_ee_image(rgb_2024_url, axes[0, 2], 'Vetagrande 2024')
+    img_2004 = display_ee_image(rgb_2004_url, axes[0, 0], 'Tequila 2004')
+    img_2014 = display_ee_image(rgb_2014_url, axes[0, 1], 'Tequila 2014')
+    img_2024 = display_ee_image(rgb_2024_url, axes[0, 2], 'Tequila 2024')
 
     # Bottom row: Display urban change analyses
     # 2004-2014 change
@@ -482,11 +482,11 @@ def create_comparison_plot():
         axes[1, i].legend(handles=patches, loc='lower right', framealpha=0.7)
 
     plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'vetagrande_urban_comparison.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(output_dir, 'vetagrande_urban_comparison.pdf'), bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, 'tequila_urban_comparison.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, 'tequila_urban_comparison.pdf'), bbox_inches='tight')
 
     print(
-        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'vetagrande_urban_comparison.png')}")
+        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'tequila_urban_comparison.png')}")
     print("Top row: Landsat images for 2004, 2014, and 2024")
     print("Bottom row: Urban change analysis for 2004-2014, 2014-2024, and 2004-2024 (full 20-year period)")
     return fig
@@ -494,11 +494,11 @@ def create_comparison_plot():
 
 def main():
     """Main function to run the comparison plot generation"""
-    print("Generating comprehensive 20-year urban growth analysis for Vetagrande, Zacatecas...")
+    print("Generating comprehensive 20-year urban growth analysis for Tequila, Jalisco...")
     try:
         fig = create_comparison_plot()
         plt.show()
-        print("Comprehensive 20-year urban growth analysis completed successfully!")
+        print("Comprehensive 20-year urban growth analysis for Tequila completed successfully!")
     except Exception as e:
         print(f"Error in main function: {e}")
         import traceback

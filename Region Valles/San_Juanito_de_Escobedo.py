@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 
 """
-Comprehensive 20-Year Analysis of Urban Growth in Vetagrande, Zacatecas, Mexico (2004-2024)
-==========================================================================
+Comprehensive 20-Year Analysis of Urban Growth in San Juanito de Escobedo, Jalisco, Mexico (2004-2024)
+====================================================================================================
 
-This script creates a comprehensive visualization of urban growth in Vetagrande over a
+This script creates a comprehensive visualization of urban growth in San Juanito de Escobedo over a
 20-year period in a 2x3 grid layout. The top row displays Landsat images for 2004,
 2014, and 2024, while the bottom row shows urban change analysis for 2004-2014,
 2014-2024, and the full 20-year period (2004-2024). The script produces a visual
@@ -36,7 +36,7 @@ logging.basicConfig(level=logging.INFO,
 import matplotlib.patches as mpatches
 
 # Set up output directory
-output_dir = 'vetagrande_comparison'
+output_dir = 'san_juanito_comparison'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
 
@@ -219,9 +219,9 @@ def create_comparison_plot():
     - Top row: Landsat images for 2004, 2014, and 2024
     - Bottom row: Urban change between 2004-2014, 2014-2024, and full 20-year change (2004-2024)
     """
-    # Get the Region of Interest (ROI) for Vetagrande, Zacatecas
-    vetagrande_point = ee.Geometry.Point([-102.647, 22.834])
-    roi = vetagrande_point.buffer(7000)  # 7km buffer around center
+    # Get the Region of Interest (ROI) - San Juanito de Escobedo, Jalisco coordinates
+    san_juanito_point = ee.Geometry.Point([-104.0153, 20.7991])
+    roi = san_juanito_point.buffer(5000)  # 5km buffer around center (smaller town than Ameca)
 
     # Get Landsat composites for all three time periods
     print("Fetching Landsat images for 2004, 2014, and 2024...")
@@ -254,7 +254,6 @@ def create_comparison_plot():
     # Full 20-year change (2004-2024)
     urban_change_04_24 = urban_2004.add(urban_2024.multiply(2))
 
-    # Download the images as NumPy arrays for visualization
     # Scale and region parameters for downloading images
     scale = 30  # 30m resolution
     region = roi
@@ -325,6 +324,7 @@ def create_comparison_plot():
             'dimensions': 1024,
             'format': 'png'
         })
+
     # Get urban change visualization parameters
     urban_change_vis = {
         'min': 0,
@@ -454,9 +454,9 @@ def create_comparison_plot():
             return img
 
     # Top row: Display satellite images for all three time periods
-    img_2004 = display_ee_image(rgb_2004_url, axes[0, 0], 'Vetagrande 2004')
-    img_2014 = display_ee_image(rgb_2014_url, axes[0, 1], 'Vetagrande 2014')
-    img_2024 = display_ee_image(rgb_2024_url, axes[0, 2], 'Vetagrande 2024')
+    img_2004 = display_ee_image(rgb_2004_url, axes[0, 0], 'San Juanito de Escobedo 2004')
+    img_2014 = display_ee_image(rgb_2014_url, axes[0, 1], 'San Juanito de Escobedo 2014')
+    img_2024 = display_ee_image(rgb_2024_url, axes[0, 2], 'San Juanito de Escobedo 2024')
 
     # Bottom row: Display urban change analyses
     # 2004-2014 change
@@ -481,12 +481,15 @@ def create_comparison_plot():
     for i in range(3):
         axes[1, i].legend(handles=patches, loc='lower right', framealpha=0.7)
 
-    plt.tight_layout()
-    plt.savefig(os.path.join(output_dir, 'vetagrande_urban_comparison.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(output_dir, 'vetagrande_urban_comparison.pdf'), bbox_inches='tight')
+    # Add figure title
+    fig.suptitle('Urban Growth Analysis of San Juanito de Escobedo, Jalisco (2004-2024)', fontsize=16)
+
+    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust for the suptitle
+    plt.savefig(os.path.join(output_dir, 'san_juanito_urban_comparison.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, 'san_juanito_urban_comparison.pdf'), bbox_inches='tight')
 
     print(
-        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'vetagrande_urban_comparison.png')}")
+        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'san_juanito_urban_comparison.png')}")
     print("Top row: Landsat images for 2004, 2014, and 2024")
     print("Bottom row: Urban change analysis for 2004-2014, 2014-2024, and 2004-2024 (full 20-year period)")
     return fig
@@ -494,7 +497,7 @@ def create_comparison_plot():
 
 def main():
     """Main function to run the comparison plot generation"""
-    print("Generating comprehensive 20-year urban growth analysis for Vetagrande, Zacatecas...")
+    print("Generating comprehensive 20-year urban growth analysis for San Juanito de Escobedo...")
     try:
         fig = create_comparison_plot()
         plt.show()
