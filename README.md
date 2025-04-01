@@ -1,1 +1,0 @@
-# ManchaUrbana_2025
