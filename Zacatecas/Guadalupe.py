@@ -35,10 +35,16 @@ logging.basicConfig(level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 import matplotlib.patches as mpatches
 
-# Set up output directory
+# Set up output directories
 output_dir = 'guadalupe_comparison'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
+
+# Set up a separate directory for individual images
+individual_output_dir = 'guadalupe_individual'
+if not os.path.exists(individual_output_dir):
+    os.makedirs(individual_output_dir)
+    print(f"Created directory for individual images: {individual_output_dir}")
 
 # Initialize and authenticate Earth Engine
 try:
@@ -50,6 +56,37 @@ except Exception as e:
     ee.Authenticate()
     ee.Initialize(project='proyectocuvallesmanchau25')
     print("Nueva autenticación realizada")
+
+
+def export_to_geotiff(image, filename, region, description):
+    """
+    Export an Earth Engine image to GeoTIFF format for use in QGIS
+    
+    Parameters:
+    image (ee.Image): Earth Engine image to export
+    filename (str): Name for the output file
+    region (ee.Geometry): Region to export
+    description (str): Description for the export task
+    
+    Returns:
+    ee.batch.Task: The export task that can be monitored
+    """
+    # Configure the export
+    task = ee.batch.Export.image.toDrive(
+        image=image,
+        description=description,
+        folder='ManchaUrbana_Guadalupe',
+        fileNamePrefix=filename,
+        region=region,
+        scale=30,
+        crs='EPSG:4326',
+        maxPixels=1e13
+    )
+    
+    # Start the export
+    task.start()
+    print(f"Started GeoTIFF export task for {filename}")
+    return task
 
 
 def get_landsat_collection(year, roi):
@@ -383,11 +420,39 @@ def create_comparison_plot():
             'format': 'png'
         })
 
-    # Now create the plot - 2x3 grid layout
-    fig, axes = plt.subplots(2, 3, figsize=(18, 12))
+    # Export images to GeoTIFF for QGIS
+    print("\nExporting images to GeoTIFF format for QGIS analysis...")
+    
+    # Export satellite images with natural color visualization
+    vis_satellite_2004 = landsat_2004.visualize(**vis_params_l5)
+    vis_satellite_2014 = landsat_2014.visualize(**vis_params_l8)
+    vis_satellite_2024 = landsat_2024.visualize(**vis_params_l8)
+    
+    # Export raw satellite images (for analysis)
+    export_to_geotiff(landsat_2004, 'guadalupe_2004_raw', roi, 'Guadalupe2004Raw')
+    export_to_geotiff(landsat_2014, 'guadalupe_2014_raw', roi, 'Guadalupe2014Raw')
+    export_to_geotiff(landsat_2024, 'guadalupe_2024_raw', roi, 'Guadalupe2024Raw')
+    
+    # Export visualized satellite images (for display)
+    export_to_geotiff(vis_satellite_2004, 'guadalupe_2004_rgb', roi, 'Guadalupe2004RGB')
+    export_to_geotiff(vis_satellite_2014, 'guadalupe_2014_rgb', roi, 'Guadalupe2014RGB')
+    export_to_geotiff(vis_satellite_2024, 'guadalupe_2024_rgb', roi, 'Guadalupe2024RGB')
+    
+    # Export urban change maps
+    export_to_geotiff(urban_change_04_14, 'guadalupe_change_2004_2014', roi, 'Change2004_2014')
+    export_to_geotiff(urban_change_14_24, 'guadalupe_change_2014_2024', roi, 'Change2014_2024')
+    export_to_geotiff(urban_change_04_24, 'guadalupe_change_2004_2024', roi, 'Change2004_2024')
+    
+    # Export urban masks for each year (for additional analysis)
+    export_to_geotiff(urban_2004, 'guadalupe_urban_2004', roi, 'Urban2004')
+    export_to_geotiff(urban_2014, 'guadalupe_urban_2014', roi, 'Urban2014')
+    export_to_geotiff(urban_2024, 'guadalupe_urban_2024', roi, 'Urban2024')
+    
+    print("All GeoTIFF export tasks have been started. Files will be available in your Google Drive folder 'ManchaUrbana_Guadalupe'\n")
 
     # Function to download and display image from URL with better error handling
-    def display_ee_image(url, ax, title, add_scale=False):
+    def display_ee_image(url, title, add_scale=False, save_filename=None):
+        fig, ax = plt.subplots(figsize=(10, 8))
         try:
             print(f"Downloading image from URL: {url[:100]}...")
             # Make the request with a timeout
@@ -438,7 +503,7 @@ def create_comparison_plot():
 
             # Display the image
             ax.imshow(img)
-            ax.set_title(title, fontsize=14)
+            ax.set_title(title, fontsize=16)
             ax.axis('off')
             
             # Add scale bar if requested (for visual reference)
@@ -452,7 +517,25 @@ def create_comparison_plot():
                 ax.text(20, img.shape[0] - 40, '≈ 1 km', 
                        color='white', fontsize=10, 
                        bbox=dict(facecolor='black', alpha=0.5, pad=2))
-            return img
+            
+            # Add legend for urban change images
+            if "Change" in title:
+                legend_labels = ['Non-urban', 'Urban growth', 'Stable urban']
+                legend_colors = ['darkgreen', 'red', 'darkred']
+                patches = [mpatches.Patch(color=color, label=label)
+                        for color, label in zip(legend_colors, legend_labels)]
+                plt.legend(handles=patches, loc='lower right', framealpha=0.8, fontsize=12)
+            
+            # Save the figure if filename is provided
+            # Save the figure if filename is provided
+            if save_filename:
+                plt.tight_layout()
+                # Save as PNG
+                plt.savefig(os.path.join(individual_output_dir, f"{save_filename}.png"), dpi=300, bbox_inches='tight')
+                # Save as PDF
+                plt.savefig(os.path.join(individual_output_dir, f"{save_filename}.pdf"), bbox_inches='tight')
+                print(f"Image saved to {os.path.join(individual_output_dir, f'{save_filename}.png')} and .pdf")
+            return img, fig
 
         except Exception as e:
             print(f"Error in display_ee_image for {title}: {e}")
@@ -461,57 +544,68 @@ def create_comparison_plot():
             ax.imshow(img)
             ax.set_title(f"{title} (Error loading)", fontsize=14, color='red')
             ax.text(0.5, 0.5, f"Failed to load image:\n{str(e)}",
-                    ha='center', va='center', transform=ax.transAxes,
-                    fontsize=12, color='red')
-            ax.axis('off')
-            return img
+                   ha='center', va='center', transform=ax.transAxes,
+                   fontsize=14, color='red')
+            # Save the error image if filename is provided
+            if save_filename:
+                plt.tight_layout()
+                plt.savefig(os.path.join(individual_output_dir, f"{save_filename}.png"), dpi=300, bbox_inches='tight')
+                plt.savefig(os.path.join(individual_output_dir, f"{save_filename}.pdf"), bbox_inches='tight')
+                print(f"Error image saved to {os.path.join(individual_output_dir, f'{save_filename}.png')} and .pdf")
+                plt.tight_layout()
+                plt.savefig(os.path.join(individual_output_dir, f"{save_filename}.png"), dpi=300, bbox_inches='tight')
+                plt.savefig(os.path.join(individual_output_dir, f"{save_filename}.pdf"), bbox_inches='tight')
+                print(f"Error image saved to {os.path.join(individual_output_dir, f'{save_filename}.png')} and .pdf")
 
-    # Top row: Display satellite images for all three time periods
-    img_2004 = display_ee_image(rgb_2004_url, axes[0, 0], 'Guadalupe 2004')
-    img_2014 = display_ee_image(rgb_2014_url, axes[0, 1], 'Guadalupe 2014')
-    img_2024 = display_ee_image(rgb_2024_url, axes[0, 2], 'Guadalupe 2024')
-
-    # Bottom row: Display urban change analyses
-    # 2004-2014 change
-    img_change_04_14 = display_ee_image(change_url_04_14, axes[1, 0], 'Urban Change 2004-2014')
-
-    # 2014-2024 change
-    img_change_14_24 = display_ee_image(change_url_14_24, axes[1, 1], 'Urban Change 2014-2024')
-
-    # 2004-2024 change (full 20-year period)
-    img_change_04_24 = display_ee_image(change_url_04_24, axes[1, 2], 'Urban Change 2004-2024', add_scale=True)
-    # Create a single legend for the entire figure (excluding urban loss)
-    legend_labels = ['Non-urban', 'Urban growth', 'Stable urban']
-    legend_colors = ['darkgreen', 'red', 'darkred']
-    patches = [mpatches.Patch(color=color, label=label)
-               for color, label in zip(legend_colors, legend_labels)]
+    # Create and save individual images
+    print("Generating individual images for Guadalupe urban growth analysis...")
     
-    # Add a single legend to the figure instead of one for each subplot
-    # Position it on the right side of the figure
-    fig.legend(handles=patches, loc='center right', bbox_to_anchor=(0.98, 0.5), 
-               framealpha=0.8, fontsize=12, title="Urban Change Categories")
-
-    # Add a main title to the entire figure
-    plt.suptitle('Urban Growth Analysis of Guadalupe, Zacatecas (2004-2024)', fontsize=16, y=0.98)
+    # 1. Guadalupe 2004 (imagen satelital)
+    img_2004, fig_2004 = display_ee_image(rgb_2004_url, 'Guadalupe 2004', save_filename="guadalupe_2004")
+    plt.close(fig_2004)
     
-    # Adjust layout to leave space for the main title and the legend on the right
-    plt.tight_layout(rect=[0, 0, 0.95, 0.96])  # [left, bottom, right, top]
-    plt.savefig(os.path.join(output_dir, 'guadalupe_urban_comparison.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(output_dir, 'guadalupe_urban_comparison.pdf'), bbox_inches='tight')
-
-    print(
-        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'guadalupe_urban_comparison.png')}")
-    print("Top row: Landsat images for 2004, 2014, and 2024")
-    print("Bottom row: Urban change analysis for 2004-2014, 2014-2024, and 2004-2024 (full 20-year period)")
-    return fig
+    # 2. Guadalupe 2014 (imagen satelital)
+    img_2014, fig_2014 = display_ee_image(rgb_2014_url, 'Guadalupe 2014', save_filename="guadalupe_2014")
+    plt.close(fig_2014)
+    
+    # 3. Guadalupe 2024 (imagen satelital)
+    img_2024, fig_2024 = display_ee_image(rgb_2024_url, 'Guadalupe 2024', save_filename="guadalupe_2024")
+    plt.close(fig_2024)
+    
+    # 4. Cambio urbano 2004-2014
+    img_change_04_14, fig_change_04_14 = display_ee_image(change_url_04_14, 'Urban Change 2004-2014', 
+                                                        save_filename="guadalupe_change_2004_2014")
+    plt.close(fig_change_04_14)
+    
+    # 5. Cambio urbano 2014-2024
+    img_change_14_24, fig_change_14_24 = display_ee_image(change_url_14_24, 'Urban Change 2014-2024', 
+                                                         save_filename="guadalupe_change_2014_2024")
+    plt.close(fig_change_14_24)
+    
+    # 6. Cambio urbano total 2004-2024
+    img_change_04_24, fig_change_04_24 = display_ee_image(change_url_04_24, 'Urban Change 2004-2024', 
+                                                         save_filename="guadalupe_change_2004_2024")
+    plt.close(fig_change_04_24)
+    print("All individual images have been generated successfully!")
+    print(f"Images saved to directory: {individual_output_dir}/")
+    print("\nIMPORTANTE: Los archivos GeoTIFF se están exportando a tu Google Drive en la carpeta 'ManchaUrbana_Guadalupe'")
+    print("Estos archivos pueden tardar varios minutos en completarse. Puedes verificar el estado en: https://code.earthengine.google.com/tasks")
+    print("\nPara usar en QGIS:")
+    print("1. Descarga los archivos .tif de tu Google Drive")
+    print("2. En QGIS, usa 'Añadir Capa Ráster' para importarlos")
+    print("3. Para los mapas de cambio urbano, usa la siguiente simbología:")
+    print("   - Valor 0: Verde oscuro (Áreas no urbanas)")
+    print("   - Valor 2: Rojo (Nuevo crecimiento urbano)")
+    print("   - Valor 3: Rojo oscuro (Áreas urbanas estables)")
+    return None  # Since we're not creating a combined figure anymore
+    return None  # Since we're not creating a combined figure anymore
 
 
 def main():
     """Main function to run the comparison plot generation"""
     print("Generating comprehensive 20-year urban growth analysis for Guadalupe, Zacatecas...")
     try:
-        fig = create_comparison_plot()
-        plt.show()
+        create_comparison_plot()
         print("Comprehensive 20-year urban growth analysis completed successfully!")
     except Exception as e:
         print(f"Error in main function: {e}")
