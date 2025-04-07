@@ -240,10 +240,10 @@ def create_comparison_plot():
     urban_2024 = create_urban_mask(landsat_2024_indices)
 
     # Calculate urban change for different time periods
-    # 0 = Non-urban in both years
-    # 1 = Urban in earlier year, non-urban in later year (urban loss, rare)
-    # 2 = Non-urban in earlier year, urban in later year (urban growth)
-    # 3 = Urban in both years (stable urban)
+    # 0 = Non-urban in both years (darkgreen)
+    # 1 = Urban in earlier year, non-urban in later year (urban loss - transparent in visualization)
+    # 2 = Non-urban in earlier year, urban in later year (urban growth - red)
+    # 3 = Urban in both years (stable urban - darkred)
 
     # 2004-2014 change
     urban_change_04_14 = urban_2004.add(urban_2014.multiply(2))
@@ -326,12 +326,12 @@ def create_comparison_plot():
             'format': 'png'
         })
     # Get urban change visualization parameters
+    # Get urban change visualization parameters (without displaying urban loss)
     urban_change_vis = {
         'min': 0,
         'max': 3,
-        'palette': ['darkgreen', 'orange', 'red', 'darkred']
+        'palette': ['darkgreen', '#00000000', 'red', 'darkred']  # Using transparent color for urban loss (value 1)
     }
-
     # Visualize 2004-2014 change
     change_img_04_14 = urban_change_04_14.visualize(**urban_change_vis).clip(roi)
     try:
@@ -387,15 +387,16 @@ def create_comparison_plot():
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
 
     # Function to download and display image from URL with better error handling
-    def display_ee_image(url, ax, title):
+    def display_ee_image(url, ax, title, add_scale=False):
         try:
+            print(f"Downloading image from URL: {url[:100]}...")
             # Make the request with a timeout
-            response = requests.get(url, timeout=30)
+            response = requests.get(url, timeout=60)  # Increased timeout for slower connections
 
             # Check if the request was successful
             if response.status_code != 200:
                 print(f"Error: Received status code {response.status_code} for {title}")
-                print(f"Response content: {response.text[:200]}...")  # Print first 200 chars
+                print(f"Response content: {response.text[:200] if response.text else 'No response text'}...")  # Print first 200 chars or handle empty response
                 raise Exception(f"Failed to download image: HTTP {response.status_code}")
 
             # Check content type
@@ -439,6 +440,18 @@ def create_comparison_plot():
             ax.imshow(img)
             ax.set_title(title, fontsize=14)
             ax.axis('off')
+            
+            # Add scale bar if requested (for visual reference)
+            if add_scale:
+                from matplotlib.patches import Rectangle
+                # Add a 1km scale bar in the lower left
+                bar_length = 100  # pixels (approximate 1km at this scale)
+                bar = Rectangle((20, img.shape[0] - 30), bar_length, 5, 
+                               facecolor='white', edgecolor='black')
+                ax.add_patch(bar)
+                ax.text(20, img.shape[0] - 40, '≈ 1 km', 
+                       color='white', fontsize=10, 
+                       bbox=dict(facecolor='black', alpha=0.5, pad=2))
             return img
 
         except Exception as e:
@@ -466,22 +479,23 @@ def create_comparison_plot():
     img_change_14_24 = display_ee_image(change_url_14_24, axes[1, 1], 'Urban Change 2014-2024')
 
     # 2004-2024 change (full 20-year period)
-    img_change_04_24 = display_ee_image(change_url_04_24, axes[1, 2], 'Urban Change 2004-2024')
-
-    # Add colorbar for urban change
-    cmap = ListedColormap(['darkgreen', 'orange', 'red', 'darkred'])
-
-    # Create legend patches
-    legend_labels = ['Non-urban', 'Urban loss', 'Urban growth', 'Stable urban']
-    legend_colors = ['darkgreen', 'orange', 'red', 'darkred']
+    img_change_04_24 = display_ee_image(change_url_04_24, axes[1, 2], 'Urban Change 2004-2024', add_scale=True)
+    # Create a single legend for the entire figure (excluding urban loss)
+    legend_labels = ['Non-urban', 'Urban growth', 'Stable urban']
+    legend_colors = ['darkgreen', 'red', 'darkred']
     patches = [mpatches.Patch(color=color, label=label)
                for color, label in zip(legend_colors, legend_labels)]
+    
+    # Add a single legend to the figure instead of one for each subplot
+    # Position it on the right side of the figure
+    fig.legend(handles=patches, loc='center right', bbox_to_anchor=(0.98, 0.5), 
+               framealpha=0.8, fontsize=12, title="Urban Change Categories")
 
-    # Add the legend to each change plot
-    for i in range(3):
-        axes[1, i].legend(handles=patches, loc='lower right', framealpha=0.7)
-
-    plt.tight_layout()
+    # Add a main title to the entire figure
+    plt.suptitle('Urban Growth Analysis of Guadalupe, Zacatecas (2004-2024)', fontsize=16, y=0.98)
+    
+    # Adjust layout to leave space for the main title and the legend on the right
+    plt.tight_layout(rect=[0, 0, 0.95, 0.96])  # [left, bottom, right, top]
     plt.savefig(os.path.join(output_dir, 'guadalupe_urban_comparison.png'), dpi=300, bbox_inches='tight')
     plt.savefig(os.path.join(output_dir, 'guadalupe_urban_comparison.pdf'), bbox_inches='tight')
 
