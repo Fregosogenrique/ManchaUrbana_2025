@@ -1,9 +1,6 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
-Comprehensive 20-Year Analysis of Urban Growth in Guachinango, Mexico (2004-2024)
-==========================================================================
+Comprehensive 20-Year Analysis of Urban Growth in Guachinango, Jalisco, Mexico (2004-2024)
+==================================================================================================
 
 This script creates a comprehensive visualization of urban growth in Guachinango over a
 20-year period in a 2x3 grid layout. The top row displays Landsat images for 2004,
@@ -29,6 +26,7 @@ import requests
 import io
 from matplotlib.image import imread
 import logging
+from PIL import Image
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -36,9 +34,15 @@ logging.basicConfig(level=logging.INFO,
 import matplotlib.patches as mpatches
 
 # Set up output directory
-output_dir = 'guachinango_comparison'
+output_dir = 'Guachinango_comparison'
 if not os.path.exists(output_dir):
     os.makedirs(output_dir)
+
+# Set up a separate directory for individual images
+individual_output_dir = 'Guachinango_individual'
+if not os.path.exists(individual_output_dir):
+    os.makedirs(individual_output_dir)
+    print(f"Created directory for individual images: {individual_output_dir}")
 
 # Initialize and authenticate Earth Engine
 try:
@@ -50,6 +54,37 @@ except Exception as e:
     ee.Authenticate()
     ee.Initialize(project='proyectocuvallesmanchau25')
     print("Nueva autenticación realizada")
+
+
+def export_to_geotiff(image, filename, region, description):
+    """
+    Export an Earth Engine image to GeoTIFF format for use in QGIS
+
+    Parameters:
+    image (ee.Image): Earth Engine image to export
+    filename (str): Name for the output file
+    region (ee.Geometry): Region to export
+    description (str): Description for the export task
+
+    Returns:
+    ee.batch.Task: The export task that can be monitored
+    """
+    # Configure the export
+    task = ee.batch.Export.image.toDrive(
+        image=image,
+        description=description,
+        folder='ManchaUrbana_Guachinango',
+        fileNamePrefix=filename,
+        region=region,
+        scale=30,
+        crs='EPSG:4326',
+        maxPixels=1e13
+    )
+
+    # Start the export
+    task.start()
+    print(f"Started GeoTIFF export task for {filename}")
+    return task
 
 
 def get_landsat_collection(year, roi):
@@ -219,9 +254,11 @@ def create_comparison_plot():
     - Top row: Landsat images for 2004, 2014, and 2024
     - Bottom row: Urban change between 2004-2014, 2014-2024, and full 20-year change (2004-2024)
     """
-    # Get the Region of Interest (ROI) - UPDATED FOR GUACHINANGO
-    guachinango_point = ee.Geometry.Point([-104.35, 20.55])  # Coordinates for Guachinango, Jalisco
-    roi = guachinango_point.buffer(5000)  # 5km buffer around center
+    # Definir el punto central de Guachinango, Jalisco
+    guachinango_point = ee.Geometry.Point([-104.3804, 20.57723])
+
+    # Crear un buffer de 7 km alrededor del punto central
+    roi = guachinango_point.buffer(3500)  # 7000 metros de radio
 
     # Get Landsat composites for all three time periods
     print("Fetching Landsat images for 2004, 2014, and 2024...")
@@ -240,33 +277,27 @@ def create_comparison_plot():
     urban_2024 = create_urban_mask(landsat_2024_indices)
 
     # Calculate urban change for different time periods
-    # 0 = Non-urban in both years
-    # 1 = Urban in earlier year, non-urban in later year (urban loss, rare)
-    # 2 = Non-urban in earlier year, urban in later year (urban growth)
-    # 3 = Urban in both years (stable urban)
+    # 0 = Non-urban 
+    # 1 = Urban growth
+    # 2 = Stable urban
 
-    # 2004-2014 change
-    urban_change_04_14 = urban_2004.add(urban_2014.multiply(2))
+    # This mapping ensures we only get the three categories we want
+    def calculate_urban_change(earlier, later):
+        # Combine the images and create custom mapping
+        stable_urban = earlier.And(later).multiply(2)  # Stable urban (2)
+        urban_growth = later.And(earlier.Not()).multiply(1)  # Urban growth (1)
+        non_urban = earlier.Not().And(later.Not()).multiply(0)  # Non-urban (0)
+        return stable_urban.add(urban_growth).add(non_urban)
 
-    # 2014-2024 change
-    urban_change_14_24 = urban_2014.add(urban_2024.multiply(2))
-
-    # Full 20-year change (2004-2024)
-    urban_change_04_24 = urban_2004.add(urban_2024.multiply(2))
+    # Calculate changes for each period
+    urban_change_04_14 = calculate_urban_change(urban_2004, urban_2014)
+    urban_change_14_24 = calculate_urban_change(urban_2014, urban_2024)
+    urban_change_04_24 = calculate_urban_change(urban_2004, urban_2024)
 
     # Download the images as NumPy arrays for visualization
     # Scale and region parameters for downloading images
     scale = 30  # 30m resolution
     region = roi
-
-    # RGB visualization parameters for Landsat 8/9 (2014/2024)
-    vis_params_l8 = {
-        'bands': ['SR_B4', 'SR_B3', 'SR_B2'],
-        'min': 0,
-        'max': 0.3,
-        'gamma': 1.4
-    }
-
     # RGB visualization parameters for Landsat 5/7 (2004)
     vis_params_l5 = {
         'bands': ['SR_B3', 'SR_B2', 'SR_B1'],  # Different band numbering for Landsat 5/7
@@ -275,6 +306,15 @@ def create_comparison_plot():
         'gamma': 1.4
     }
 
+    # RGB visualization parameters for Landsat 8/9
+    vis_params_l8 = {
+        'bands': ['SR_B4', 'SR_B3', 'SR_B2'],  # RGB bands for Landsat 8/9
+        'min': 0,
+        'max': 0.3,
+        'gamma': 1.4
+    }
+
+    # Get 2004 RGB image
     # Get 2004 RGB image
     rgb_2004 = landsat_2004.visualize(**vis_params_l5).clip(roi)
     try:
@@ -325,11 +365,12 @@ def create_comparison_plot():
             'dimensions': 1024,
             'format': 'png'
         })
+
     # Get urban change visualization parameters
     urban_change_vis = {
         'min': 0,
-        'max': 3,
-        'palette': ['darkgreen', 'orange', 'red', 'darkred']
+        'max': 2,
+        'palette': ['darkgreen', 'red', 'blue']  # [non-urban, urban growth, stable urban]
     }
 
     # Visualize 2004-2014 change
@@ -382,6 +423,37 @@ def create_comparison_plot():
             'dimensions': 1024,
             'format': 'png'
         })
+
+    # Export images to GeoTIFF for QGIS
+    print("\nExporting images to GeoTIFF format for QGIS analysis...")
+
+    # Export satellite images with natural color visualization
+    vis_satellite_2004 = landsat_2004.visualize(**vis_params_l5)
+    vis_satellite_2014 = landsat_2014.visualize(**vis_params_l8)
+    vis_satellite_2024 = landsat_2024.visualize(**vis_params_l8)
+
+    # Export raw satellite images (for analysis)
+    export_to_geotiff(landsat_2004, 'Guachinango_2004_raw', roi, 'Guachinango2004Raw')
+    export_to_geotiff(landsat_2014, 'Guachinango_2014_raw', roi, 'Guachinango2014Raw')
+    export_to_geotiff(landsat_2024, 'Guachinango_2024_raw', roi, 'Guachinango2024Raw')
+
+    # Export visualized satellite images (for display)
+    export_to_geotiff(vis_satellite_2004, 'Guachinango_2004_rgb', roi, 'Guachinango2004RGB')
+    export_to_geotiff(vis_satellite_2014, 'Guachinango_2014_rgb', roi, 'Guachinango2014RGB')
+    export_to_geotiff(vis_satellite_2024, 'Guachinango_2024_rgb', roi, 'Guachinango2024RGB')
+
+    # Export urban change maps
+    export_to_geotiff(urban_change_04_14, 'Guachinango_change_2004_2014', roi, 'Change2004_2014')
+    export_to_geotiff(urban_change_14_24, 'Guachinango_change_2014_2024', roi, 'Change2014_2024')
+    export_to_geotiff(urban_change_04_24, 'Guachinango_change_2004_2024', roi, 'Change2004_2024')
+
+    # Export urban masks for each year (for additional analysis)
+    export_to_geotiff(urban_2004, 'Guachinango_urban_2004', roi, 'Urban2004')
+    export_to_geotiff(urban_2014, 'Guachinango_urban_2014', roi, 'Urban2014')
+    export_to_geotiff(urban_2024, 'Guachinango_urban_2024', roi, 'Urban2024')
+
+    print(
+        "All GeoTIFF export tasks have been started. Files will be available in your Google Drive folder 'ManchaUrbana_Guachinango'\n")
 
     # Now create the plot - 2x3 grid layout
     fig, axes = plt.subplots(2, 3, figsize=(18, 12))
@@ -469,11 +541,11 @@ def create_comparison_plot():
     img_change_04_24 = display_ee_image(change_url_04_24, axes[1, 2], 'Urban Change 2004-2024')
 
     # Add colorbar for urban change
-    cmap = ListedColormap(['darkgreen', 'orange', 'red', 'darkred'])
+    cmap = ListedColormap(['darkgreen', 'red', 'blue'])
 
     # Create legend patches
-    legend_labels = ['Non-urban', 'Urban loss', 'Urban growth', 'Stable urban']
-    legend_colors = ['darkgreen', 'orange', 'red', 'darkred']
+    legend_labels = ['Non-urban', 'Urban growth', 'Stable urban']
+    legend_colors = ['darkgreen', 'red', 'blue']
     patches = [mpatches.Patch(color=color, label=label)
                for color, label in zip(legend_colors, legend_labels)]
 
@@ -481,15 +553,14 @@ def create_comparison_plot():
     for i in range(3):
         axes[1, i].legend(handles=patches, loc='lower right', framealpha=0.7)
 
-    # Add a title for the entire figure
-    plt.suptitle('Urban Growth Analysis for Guachinango, Jalisco (2004-2024)', fontsize=16, y=0.98)
-
-    plt.tight_layout(rect=[0, 0, 1, 0.96])  # Adjust for the suptitle
-    plt.savefig(os.path.join(output_dir, 'guachinango_urban_comparison.png'), dpi=300, bbox_inches='tight')
-    plt.savefig(os.path.join(output_dir, 'guachinango_urban_comparison.pdf'), bbox_inches='tight')
+    plt.tight_layout()
+    fig_title = fig.suptitle('Análisis de Crecimiento Urbano de Guachinango, Jalisco (2004-2024)',
+                             fontsize=16, y=1.02)
+    plt.savefig(os.path.join(output_dir, 'Guachinango_urban_comparison.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(output_dir, 'Guachinango_urban_comparison.pdf'), bbox_inches='tight')
 
     print(
-        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'guachinango_urban_comparison.png')}")
+        f"Comprehensive 20-year urban growth analysis saved to {os.path.join(output_dir, 'Guachinango_urban_comparison.png')}")
     print("Top row: Landsat images for 2004, 2014, and 2024")
     print("Bottom row: Urban change analysis for 2004-2014, 2014-2024, and 2004-2024 (full 20-year period)")
     return fig

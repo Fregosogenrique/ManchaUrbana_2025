@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-
 """
 Comprehensive 20-Year Analysis of Urban Growth in Amatitan, Jalisco, Mexico (2004-2024)
 ==================================================================================================
@@ -29,6 +26,7 @@ import requests
 import io
 from matplotlib.image import imread
 import logging
+from PIL import Image
 
 # Set up logging
 logging.basicConfig(level=logging.INFO,
@@ -277,25 +275,27 @@ def create_comparison_plot():
     urban_2024 = create_urban_mask(landsat_2024_indices)
 
     # Calculate urban change for different time periods
-    # 0 = Non-urban in both years
-    # 1 = Urban in earlier year, non-urban in later year (urban loss, rare)
-    # 2 = Non-urban in earlier year, urban in later year (urban growth)
-    # 3 = Urban in both years (stable urban)
+    # 0 = Non-urban 
+    # 1 = Urban growth
+    # 2 = Stable urban
+    
+    # This mapping ensures we only get the three categories we want
+    def calculate_urban_change(earlier, later):
+        # Combine the images and create custom mapping
+        stable_urban = earlier.And(later).multiply(2)  # Stable urban (2)
+        urban_growth = later.And(earlier.Not()).multiply(1)  # Urban growth (1)
+        non_urban = earlier.Not().And(later.Not()).multiply(0)  # Non-urban (0)
+        return stable_urban.add(urban_growth).add(non_urban)
 
-    # 2004-2014 change
-    urban_change_04_14 = urban_2004.add(urban_2014.multiply(2))
-
-    # 2014-2024 change
-    urban_change_14_24 = urban_2014.add(urban_2024.multiply(2))
-
-    # Full 20-year change (2004-2024)
-    urban_change_04_24 = urban_2004.add(urban_2024.multiply(2))
+    # Calculate changes for each period
+    urban_change_04_14 = calculate_urban_change(urban_2004, urban_2014)
+    urban_change_14_24 = calculate_urban_change(urban_2014, urban_2024)
+    urban_change_04_24 = calculate_urban_change(urban_2004, urban_2024)
 
     # Download the images as NumPy arrays for visualization
     # Scale and region parameters for downloading images
     scale = 30  # 30m resolution
     region = roi
-
     # RGB visualization parameters for Landsat 5/7 (2004)
     vis_params_l5 = {
         'bands': ['SR_B3', 'SR_B2', 'SR_B1'],  # Different band numbering for Landsat 5/7
@@ -304,6 +304,15 @@ def create_comparison_plot():
         'gamma': 1.4
     }
 
+    # RGB visualization parameters for Landsat 8/9
+    vis_params_l8 = {
+        'bands': ['SR_B4', 'SR_B3', 'SR_B2'],  # RGB bands for Landsat 8/9
+        'min': 0,
+        'max': 0.3,
+        'gamma': 1.4
+    }
+
+    # Get 2004 RGB image
     # Get 2004 RGB image
     rgb_2004 = landsat_2004.visualize(**vis_params_l5).clip(roi)
     try:
@@ -358,8 +367,8 @@ def create_comparison_plot():
     # Get urban change visualization parameters
     urban_change_vis = {
         'min': 0,
-        'max': 3,
-        'palette': ['darkgreen', 'orange', 'red', 'darkred']
+        'max': 2,
+        'palette': ['darkgreen', 'red', 'blue']  # [non-urban, urban growth, stable urban]
     }
 
     # Visualize 2004-2014 change
@@ -529,11 +538,11 @@ def create_comparison_plot():
     img_change_04_24 = display_ee_image(change_url_04_24, axes[1, 2], 'Urban Change 2004-2024')
 
     # Add colorbar for urban change
-    cmap = ListedColormap(['darkgreen', 'orange', 'red', 'darkred'])
+    cmap = ListedColormap(['darkgreen', 'red', 'blue'])
 
     # Create legend patches
-    legend_labels = ['Non-urban', 'Urban loss', 'Urban growth', 'Stable urban']
-    legend_colors = ['darkgreen', 'orange', 'red', 'darkred']
+    legend_labels = ['Non-urban', 'Urban growth', 'Stable urban']
+    legend_colors = ['darkgreen', 'red', 'blue']
     patches = [mpatches.Patch(color=color, label=label)
                for color, label in zip(legend_colors, legend_labels)]
 
@@ -569,12 +578,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-    }
-
-    # RGB visualization parameters for Landsat 5/7 (2004)
-    vis_params_l5 = {
-        'bands': ['SR_B3', 'SR_B2', 'SR_B1'],  # Different band numbering for Landsat 5/7
-        'min': 0,
-        'max': 0.3,
-        
-
