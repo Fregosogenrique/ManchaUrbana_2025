@@ -598,7 +598,6 @@ def create_comparison_plot():
     print("   - Valor 2: Rojo (Nuevo crecimiento urbano)")
     print("   - Valor 3: Rojo oscuro (Áreas urbanas estables)")
     return None  # Since we're not creating a combined figure anymore
-    return None  # Since we're not creating a combined figure anymore
 
 
 def main():
